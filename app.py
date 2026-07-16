@@ -64,7 +64,7 @@ def get_universe_tickers(universe_name: str) -> list:
 @st.cache_data(show_spinner=False)
 def download_market_data(tickers: list, macro_ticker: str, period_years: int):
     end_date = datetime.today()
-    start_date = end_date - timedelta(days=period_years * 365 + 300) # Extended buffer to warm up 2026 technicals cleanly
+    start_date = end_date - timedelta(days=period_years * 365 + 300) # Extended buffer to warm up technicals cleanly
     all_tickers = list(set(tickers + [macro_ticker]))
     
     try:
@@ -114,7 +114,7 @@ def compute_technical_matrix(market_data: pd.DataFrame) -> dict:
     }
 
 # ==============================================================================
-# 4. STEP 4: PORTFOLIO BACKTEST SIMULATION ENGINE
+# 4. PORTFOLIO BACKTEST SIMULATION ENGINE
 # ==============================================================================
 def run_momentum_backtest(
     tickers: list,
@@ -129,7 +129,7 @@ def run_momentum_backtest(
     f_high10: bool,
     nifty_filter: bool,
     start_date: datetime
-) -> pd.DataFrame:
+) -> tuple[pd.Series, int]:
     """
     Simulates a path-dependent momentum backtest with transaction frictions and cash allocation logic.
     """
@@ -147,15 +147,14 @@ def run_momentum_backtest(
     equity_curve = pd.Series(index=valid_dates, dtype=float)
     current_capital = initial_capital
     active_portfolio = {} # Structure: {ticker: allocated_cash}
+    free_cash = initial_capital # Safe variable initialization
     
     # Friction rate constant (0.10% per transaction leg)
     fee_rate = 0.0010
-    
     total_trades_count = 0
-    winning_trades_count = 0
     
     # Dynamic chronological execution loop
-    for idx, current_date in enumerate(valid_dates):
+    for current_date in valid_dates:
         
         # Scenario A: Resolve daily performance updates on held assets
         if active_portfolio:
@@ -212,7 +211,7 @@ def run_momentum_backtest(
             # 3. Liquidate current holdings that are rotated out
             liquidated_cash = 0
             for ticker in list(active_portfolio.keys()):
-                if ticker taxpayer not in selected_candidates:
+                if ticker not in selected_candidates: # FIXED: Removed 'taxpayer' typo
                     # Apply 0.10% liquidation trade fee cost
                     liquidated_cash += active_portfolio[ticker] * (1 - fee_rate)
                     del active_portfolio[ticker]
@@ -220,10 +219,7 @@ def run_momentum_backtest(
                     liquidated_cash += active_portfolio[ticker]
             
             # Add back any cash reserves previously unallocated
-            if 'free_cash' in locals() or 'free_cash' in globals():
-                total_liquid_pool = liquidated_cash + free_cash
-            else:
-                total_liquid_pool = current_capital
+            total_liquid_pool = liquidated_cash + free_cash
                 
             # 4. Re-allocate cash assets into newly ranked nodes
             num_targets = len(selected_candidates)
@@ -232,7 +228,6 @@ def run_momentum_backtest(
                 cash_per_slot = total_liquid_pool / portfolio_size
                 
                 new_portfolio = {}
-                used_cash = 0
                 for target_t in selected_candidates:
                     # If already holding the target, transition value with zero transaction drag
                     if target_t in active_portfolio:
@@ -252,8 +247,6 @@ def run_momentum_backtest(
                         # Full deployment entry fee applied
                         new_portfolio[target_t] = cash_per_slot * (1 - fee_rate)
                         total_trades_count += 1
-                        
-                    used_cash += cash_per_slot
                 
                 active_portfolio = new_portfolio
                 free_cash = max(0.0, total_liquid_pool - (num_targets * cash_per_slot))
@@ -261,10 +254,6 @@ def run_momentum_backtest(
                 # Fallback to cash safety regime
                 active_portfolio = {}
                 free_cash = total_liquid_pool
-        else:
-            # Initialize variable scopes outside rebalance events
-            if idx == 0:
-                free_cash = current_capital
 
     return equity_curve, max(1, total_trades_count)
 
