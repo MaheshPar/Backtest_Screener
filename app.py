@@ -32,7 +32,7 @@ st.markdown("""
         border-color: #4F4F5A;
     }
     </style>
-""", unsafe_allow_html=True)  # FIXED: Changed from unsafe_style_html to unsafe_allow_html
+""", unsafe_allow_html=True)
 
 # ==============================================================================
 # 2. SESSION STATE INITIALIZATION
@@ -103,7 +103,7 @@ with header_col1:
 with header_col2:
     st.metric(label="Available Credits", value="11 cr", delta="Active Account")
 
-st.hr()
+st.divider()  # FIXED: Changed from st.hr() to st.divider()
 
 # ==============================================================================
 # 5. MAIN INTERFACE: CONFIGURATION PARAMETERS
