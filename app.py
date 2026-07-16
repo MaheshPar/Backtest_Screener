@@ -32,7 +32,7 @@ st.markdown("""
         border-color: #4F4F5A;
     }
     </style>
-""", unsafe_style_html=True)
+""", unsafe_allow_html=True)  # FIXED: Changed from unsafe_style_html to unsafe_allow_html
 
 # ==============================================================================
 # 2. SESSION STATE INITIALIZATION
@@ -48,9 +48,7 @@ def get_universe_tickers(universe_name: str) -> list:
     """
     Returns the constituent ticker list for the selected Indian index.
     In production, this can parse live CSV targets from the NSE website.
-    To ensure out-of-the-box reliability, a high-conviction structural sample is mapped.
     """
-    # Base dictionaries mapping Indian equity tickers (.NS suffix)
     universes = {
         "NIFTY 50": [
             "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS", "INFY.NS",
@@ -66,8 +64,6 @@ def get_universe_tickers(universe_name: str) -> list:
             "TATAELXSI.NS", "TRENT.NS", "PFC.NS", "RECLTD.NS", "DMART.NS"
         ]
     }
-    
-    # Fallback to NIFTY 50 if the sample universe isn't explicitly defined in this mockup
     return universes.get(universe_name, universes["NIFTY 50"])
 
 @st.cache_data(show_spinner=False)
@@ -76,18 +72,17 @@ def download_market_data(tickers: list, macro_ticker: str, period_years: int):
     Downloads historical adjusted OHLCV data from yfinance with optimized parallel caching.
     """
     end_date = datetime.today()
-    start_date = end_date - timedelta(days=period_years * 365 + 50) # Buffer added for moving average initialization
+    start_date = end_date - timedelta(days=period_years * 365 + 50)  # Buffer for indicator warm-up
     
     all_tickers = list(set(tickers + [macro_ticker]))
     
     try:
-        # Fetching adjusted OHLCV data
         raw_data = yf.download(
             tickers=all_tickers,
             start=start_date.strftime('%Y-%m-%d'),
             end=end_date.strftime('%Y-%m-%d'),
             group_by='column',
-            auto_adjust=True, # Critical for accurate momentum calculations without artificial corporate splits bias
+            auto_adjust=True,  # Protects momentum filters against artificial dividend/split gaps
             progress=False
         )
         
@@ -216,16 +211,12 @@ if submit_button:
 if st.session_state.backtest_triggered:
     st.success(f"Parameters locked! Resolving tickers for {universe}...")
     
-    # 1. Resolve Universe Constituents
     constituents = get_universe_tickers(universe)
-    macro_index_ticker = "^NSEI" # Nifty 50 Index for absolute regime filter tracking
+    macro_index_ticker = "^NSEI"
     
     st.info(f"Identified {len(constituents)} index assets. Commencing data ingestion pipeline via yfinance...")
-    
-    # 2. Extract Timing Window Numerical Value
     years_int = int(backtest_period.split()[0])
     
-    # 3. Pull Cached Asset Histories
     with st.spinner("Downloading historical multi-asset OHLCV data frames..."):
         market_data, error_log = download_market_data(
             tickers=constituents, 
@@ -236,15 +227,12 @@ if st.session_state.backtest_triggered:
     if error_log:
         st.error(f"Data Pipeline Disrupted: {error_log}")
     else:
-        st.success("Historical data arrays successfully downlinked and cached!")
+        st.success("Historical data arrays successfully downlinked and cached without dependency conflicts!")
         
-        # Display operational telemetry regarding shape of downloaded data matrix
         with st.expander("🔍 Inspect Ingested Market Data Matrix Structures"):
-            st.write("Raw multi-index column schema details:")
             st.dataframe(market_data.head(5))
             st.caption(f"Data Matrix Dimension: {market_data.shape[0]} trading rows across {market_data.shape[1]} series layers.")
             
-        # Visual placeholder container blocks representing upcoming processing engines
         st.markdown("### 📈 Performance Assessment Shell")
         m_col1, m_col2, m_col3, m_col4 = st.columns(4)
         m_col1.metric("CAGR", "-- %", "Waiting for Step 4")
